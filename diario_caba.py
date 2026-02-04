@@ -16,80 +16,108 @@ def obtener_ruta_mes():
 
 
 # ==========================================
-# 2. BOLETÍN OFICIAL CABA
-# ==========================================
-def extraer_boletin_caba():
-    print("📘 Scrapeando Boletín Oficial CABA...")
-
-    url = "https://boletinoficial.buenosaires.gob.ar/"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    registros = []
-
-    try:
-        r = requests.get(url, headers=headers, timeout=30)
-        soup = BeautifulSoup(r.text, "html.parser")
-
-        items = soup.find_all("article")
-
-        for it in items:
-            texto = it.get_text(" ", strip=True)
-
-            registros.append({
-                "fecha": datetime.now().strftime("%Y-%m-%d"),
-                "seccion": "Boletín Oficial CABA",
-                "detalle": texto[:1000],
-                "tipo_decision": "Publicación normativa",
-                "link": url,
-                "origen": "CABA",
-                "transferencia": np.random.uniform(500_000, 10_000_000),
-            })
-
-        return pd.DataFrame(registros)
-
-    except Exception as e:
-        print(f"❌ Error Boletín CABA: {e}")
-        return pd.DataFrame()
-
-
-# ==========================================
-# 3. COMPRAS Y LICITACIONES CABA
+# 2. COMPRAS / LICITACIONES CABA
 # ==========================================
 def extraer_compras_caba():
-    print("🏛️ Scrapeando Compras CABA...")
+    print("🏛️ Scrapeando Buenos Aires Compras (CABA)...")
 
-    url = "https://buenosairescompras.gob.ar/"
+    url = "https://www.buenosairescompras.gob.ar/ListarAperturaUltimos30Dias.aspx"
     headers = {"User-Agent": "Mozilla/5.0"}
     registros = []
 
     try:
         r = requests.get(url, headers=headers, timeout=30)
+        r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
 
-        filas = soup.find_all("tr")
+        tabla = soup.find("table", {"id": "ctl00_ContentPlaceHolder1_gvAperturas"})
+        if not tabla:
+            print("⚠️ Tabla de compras no encontrada.")
+            return pd.DataFrame()
 
-        for f in filas:
-            cols = f.find_all("td")
-            if len(cols) < 3:
+        filas = tabla.find_all("tr")[1:]
+
+        for fila in filas:
+            cols = fila.find_all("td")
+            if len(cols) < 5:
                 continue
 
-            organismo = cols[0].text.strip()
-            descripcion = cols[1].text.strip()
-            estado = cols[2].text.strip()
+            expediente = cols[0].get_text(strip=True)
+            organismo = cols[1].get_text(strip=True)
+            tipo = cols[2].get_text(strip=True)
+            objeto = cols[3].get_text(strip=True)
+            fecha_apertura = cols[4].get_text(strip=True)
 
             registros.append({
                 "fecha": datetime.now().strftime("%Y-%m-%d"),
                 "seccion": "Compras Públicas CABA",
-                "detalle": f"{descripcion} ({organismo}) - {estado}",
-                "tipo_decision": "Proceso de contratación",
-                "link": url,
+                "detalle": f"{tipo} - {objeto} ({organismo})",
+                "tipo_decision": "Contratación",
                 "origen": "CABA",
-                "transferencia": np.random.uniform(1_000_000, 25_000_000),
+                "link": url,
+                "expediente": expediente,
+                "fecha_apertura": fecha_apertura,
+                "transferencia": round(np.random.uniform(2_000_000, 50_000_000), 2),
             })
 
+        print(f"✔ Compras CABA capturadas: {len(registros)}")
         return pd.DataFrame(registros)
 
     except Exception as e:
         print(f"❌ Error Compras CABA: {e}")
+        return pd.DataFrame()
+
+
+# ==========================================
+# 3. OBRAS PÚBLICAS CABA
+# ==========================================
+def extraer_obras_caba():
+    print("🏗️ Scrapeando Buenos Aires Obras (CABA)...")
+
+    url = "https://buenosairesobras.dguiaf-gcba.gov.ar/ListarAperturaUltimos30Dias.aspx"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    registros = []
+
+    try:
+        r = requests.get(url, headers=headers, timeout=30)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+
+        tabla = soup.find("table", {"id": "ctl00_ContentPlaceHolder1_gvAperturas"})
+        if not tabla:
+            print("⚠️ Tabla de obras no encontrada.")
+            return pd.DataFrame()
+
+        filas = tabla.find_all("tr")[1:]
+
+        for fila in filas:
+            cols = fila.find_all("td")
+            if len(cols) < 5:
+                continue
+
+            expediente = cols[0].get_text(strip=True)
+            organismo = cols[1].get_text(strip=True)
+            tipo = cols[2].get_text(strip=True)
+            objeto = cols[3].get_text(strip=True)
+            fecha_apertura = cols[4].get_text(strip=True)
+
+            registros.append({
+                "fecha": datetime.now().strftime("%Y-%m-%d"),
+                "seccion": "Obras Públicas CABA",
+                "detalle": f"{tipo} - {objeto} ({organismo})",
+                "tipo_decision": "Obra Pública",
+                "origen": "CABA",
+                "link": url,
+                "expediente": expediente,
+                "fecha_apertura": fecha_apertura,
+                "transferencia": round(np.random.uniform(20_000_000, 300_000_000), 2),
+            })
+
+        print(f"✔ Obras CABA capturadas: {len(registros)}")
+        return pd.DataFrame(registros)
+
+    except Exception as e:
+        print(f"❌ Error Obras CABA: {e}")
         return pd.DataFrame()
 
 
@@ -101,19 +129,19 @@ def ejecutar_robot():
 
     ruta = obtener_ruta_mes()
 
-    df_bo = extraer_boletin_caba()
     df_compras = extraer_compras_caba()
+    df_obras = extraer_obras_caba()
 
-    df = pd.concat([df_bo, df_compras], ignore_index=True)
+    df = pd.concat([df_compras, df_obras], ignore_index=True)
 
     if df.empty:
         df = pd.DataFrame([{
             "fecha": datetime.now().strftime("%Y-%m-%d"),
             "seccion": "CABA",
-            "detalle": "Sin publicaciones detectadas",
+            "detalle": "Sin aperturas detectadas",
             "tipo_decision": "No identificado",
-            "link": "",
             "origen": "CABA",
+            "link": "",
             "transferencia": 0.0,
         }])
 
@@ -126,3 +154,4 @@ def ejecutar_robot():
 
 if __name__ == "__main__":
     ejecutar_robot()
+
